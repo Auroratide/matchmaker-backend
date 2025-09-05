@@ -1,0 +1,26 @@
+services:
+  pinecone:
+    image: ghcr.io/pinecone-io/pinecone-local:latest
+    environment:
+      PORT: 5080
+      PINECONE_HOST: localhost
+    ports:
+      - "5080-5090:5080-5090"
+    platform: linux/amd64
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama:/root/.ollama
+    entrypoint: >
+      sh -c "
+      ollama serve &
+      sleep 3 &&
+      ollama pull nomic-embed-text &&
+      wait
+      "
+
+volumes:
+  ollama:
