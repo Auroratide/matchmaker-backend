@@ -15,3 +15,9 @@ source .venv/bin/activate
 ```
 python src/init-pinecone.py
 ```
+
+## Run something
+
+```
+python -m src.matchmake
+```
