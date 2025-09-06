@@ -1,64 +1,21 @@
-from pinecone.grpc import PineconeGRPC, GRPCClientConfig, PineconeGrpcFuture
-from typing import TypeVar, Union
-from .mwmatching import maximum_weight_matching
-
-T = TypeVar("T")
-
-pinecone = PineconeGRPC(
-	api_key="pclocal",
-	host="http://localhost:5080"
-)
-
-def gimme(thing: Union[T, PineconeGrpcFuture]) -> T:
-	if isinstance(thing, PineconeGrpcFuture):
-		return thing.result()
-	else:
-		return thing
+from .pinecone_graph import PineconeGraph
+from .matching import optimal_matching
+from .visualization import visualize_graph
 
 INDEX_NAME = "matchmaking-interests"
-
-print("Grabbing all of the doohickeries")
 ids_to_grab = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "eris"]
-index_host = pinecone.describe_index(name=INDEX_NAME).host
-index = pinecone.Index(host=index_host, grpc_config=GRPCClientConfig(secure=False))
 
-response = index.fetch(ids_to_grab)
-vectors = gimme(response).vectors.values()
+graph = PineconeGraph(INDEX_NAME)
+graph.build(ids_to_grab)
 
-
-# example: (1, 3, 0.648923)
-edges = []
-
-# Create mapping from vector ID to index for efficient lookup
-id_to_index = {vec.id: idx for idx, vec in enumerate(vectors)}
-
-for i, vecy in enumerate(vectors):
-	matches = gimme(index.query(
-		vector=vecy.values,
-		top_k=5,
-		include_metadata=False,
-	)).matches
-
-	print(vecy.id)
-	print(matches)
-	
-	# Create edges from matches
-	for match in matches:
-		# Skip self-matches
-		if match.id == vecy.id:
-			continue
-			
-		# Find the index of the matched vector
-		if match.id in id_to_index:
-			match_index = id_to_index[match.id]
-			if i < match_index:  # Only add edge in one direction to avoid duplicates
-				edges.append((i, match_index, match.score))
+edges = graph.edges()
+matching = optimal_matching(edges)
 
 print(edges)
-
-matching = maximum_weight_matching(edges)
-
 print(matching)
+
+visualize_graph(edges)
+
 
 ### IGNORE EVERYTHING BELOW
 
