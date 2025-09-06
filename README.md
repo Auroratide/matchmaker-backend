@@ -1,6 +1,10 @@
-Codebase for initting Matchmaker doohickers.
+# Matchmaker Backend (real name tbd)
 
-## Virtual Environment
+This is a small python codebase for a soon-to-exist app.
+
+## Development
+
+It's python, set up a virtual environment:
 
 ```
 # Setup
@@ -10,24 +14,17 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-## Init Pinecone database
+Docker is used only for locally mucking around. In real life, you'll wanna set up a `.env` file with keys to things. Use the `.env.example` file to tell you what's needed.
 
-DO NOT RUN THIS PLEASE.
-
-```
-python src/init-pinecone.py
-```
-
-## Init LOCAL Pinecone database for testing
-
-Do run this tho.
+Useful commands:
 
 ```
-python src/init-local.py
-```
+# Start Docker (fake pinecone, fake llm)
+docker compose up
 
-## Run something
+# Initialize the local pinecone db
+python -m src.init-local
 
-```
+# Run the script
 python -m src.matchmake
 ```
