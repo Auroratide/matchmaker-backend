@@ -10,8 +10,8 @@ class PineconeGraph:
 			api_key="pclocal",
 			host="http://localhost:5080"
 		)
-        self.id_to_index: dict[str, int] = {}
-        self.index_to_id: list[str] = []
+		self.id_to_index: dict[str, int] = {}
+		self.index_to_id: list[str] = []
 
 	def build(self, ids_to_grab):
 		index_host = self.client.describe_index(name=self.index_name).host
@@ -19,11 +19,11 @@ class PineconeGraph:
 
 		response = self.index.fetch(ids_to_grab)
 		self.vectors = list(self.gimme(response).vectors.values())
-        # establish mappings between external ids and local indices
-        self.id_to_index = {vec.id: idx for idx, vec in enumerate(self.vectors)}
-        # preserve ordering using the mapping
-        ordered = sorted(self.vectors, key=lambda v: self.id_to_index[v.id])
-        self.index_to_id = [v.id for v in ordered]
+		# establish mappings between external ids and local indices
+		self.id_to_index = {vec.id: idx for idx, vec in enumerate(self.vectors)}
+		# preserve ordering using the mapping
+		ordered = sorted(self.vectors, key=lambda v: self.id_to_index[v.id])
+		self.index_to_id = [v.id for v in ordered]
 
 	def edges(
 		self,
