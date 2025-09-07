@@ -1,7 +1,7 @@
-import json
 import os
-import threading
-from typing import Iterable, List, Set, Tuple
+from typing import Iterable, Set, Tuple, Dict, Any
+
+import requests
 
 
 def _normalize_pair(a: str, b: str) -> Tuple[str, str]:
@@ -10,72 +10,62 @@ def _normalize_pair(a: str, b: str) -> Tuple[str, str]:
 
 
 class PairStore:
-	"""A simple JSON-backed placeholder store for matched pairs.
+	"""Load existing pairs from Pinecone and upsert new pairs to Coda.
 
-	Structure on disk is a JSON array of 2-item arrays, e.g.:
-	[
-		["alice", "bob"],
-		["charlie", "dana"]
-	]
-
-	This is a placeholder that can be swapped for a real Coda client later.
+	- Expects Pinecone match objects with attributes: id: str and metadata: dict
+	  containing key 'pastPairings' (list[str]).
+	- Builds Coda row payloads using provided column IDs and sends a single
+	  bulk upsert request keyed on (Person 1 ID, Person 2 ID).
 	"""
 
-	def __init__(self, file_path: str | None = None) -> None:
-		root_dir = os.path.dirname(os.path.dirname(__file__))  # project root
-		default_path = os.path.join(root_dir, "pairs.json")
-		self.file_path = file_path or os.environ.get("PAIR_STORE_PATH", default_path)
-		self._lock = threading.Lock()
+	def __init__(self) -> None:
+		self._coda_token = os.environ.get("CODA_API_TOKEN")
+		self._coda_doc_id = os.environ.get("CODA_DOC_ID")
+		self._coda_pairings_table_id = os.environ.get("CODA_PAIRINGS_TABLE_ID")
+		self._col_person1_lookup = os.environ.get("CODA_PERSON_1_COL_ID")
+		self._col_person2_lookup = os.environ.get("CODA_PERSON_2_COL_ID")
+		self._col_person1_id = os.environ.get("CODA_PERSON_1_ID_COL_ID")
+		self._col_person2_id = os.environ.get("CODA_PERSON_2_ID_COL_ID")
+		self._col_send_email = os.environ.get("CODA_SEND_EMAIL_COL_ID")
 
-	def _read_pairs(self) -> Set[Tuple[str, str]]:
-		if not os.path.exists(self.file_path):
-			return set()
-		with open(self.file_path, "r", encoding="utf-8") as f:
-			try:
-				data = json.load(f)
-			except json.JSONDecodeError:
-				return set()
-		result: Set[Tuple[str, str]] = set()
-		if isinstance(data, list):
-			for item in data:
-				if isinstance(item, list) and len(item) == 2 and all(isinstance(x, str) for x in item):
-					result.add(_normalize_pair(item[0], item[1]))
-		return result
-
-	def _write_pairs(self, pairs: Set[Tuple[str, str]]) -> None:
-		dirname = os.path.dirname(self.file_path)
-		if dirname and not os.path.exists(dirname):
-			os.makedirs(dirname, exist_ok=True)
-		serializable: List[List[str]] = [[a, b] for (a, b) in sorted(pairs)]
-		with open(self.file_path, "w", encoding="utf-8") as f:
-			json.dump(serializable, f, indent=2, ensure_ascii=False)
-
-	def load_pairs_DEPRECATED(self) -> Set[Tuple[str, str]]:
-		"""Load all existing pairs as normalized tuples."""
-		with self._lock:
-			return self._read_pairs()
 
 	def load_pairs(self, vectors) -> Set[Tuple[str, str]]:
-		result = set[Tuple[str, str]]()
-		for vector in vectors:
-			for pastPair in vector["metadata"]["pastPairings"]:
-				result.add((vector["id"], pastPair))
-		return result
-
-	def has_pair(self, a: str, b: str) -> bool:
-		"""Check if a pair exists (order-insensitive)."""
-		key = _normalize_pair(a, b)
-		with self._lock:
-			return key in self._read_pairs()
+		"""Return normalized pairs drawn from vectors' metadata['pastPairings']."""
+		existing_pairs: Set[Tuple[str, str]] = set()
+		for vec in vectors:
+			past = vec.metadata["pastPairings"] or []
+			for partner_id in past:
+				existing_pairs.add(_normalize_pair(vec.id, partner_id))
+		return existing_pairs
 
 	def add_pairs(self, pairs: Iterable[Tuple[str, str]]) -> int:
-		"""Add pairs to the store. Returns number of newly added pairs."""
-		with self._lock:
-			existing = self._read_pairs()
-			before = len(existing)
-			for a, b in pairs:
-				existing.add(_normalize_pair(a, b))
-			self._write_pairs(existing)
-			return len(existing) - before
+		"""Bulk upsert pairs to Coda; returns number of rows attempted.
 
+		Builds rows with lookup cells set via {"rowId": id} and uses
+		(Person 1 ID, Person 2 ID) as the upsert key.
+		"""
+		rows: list[dict[str, Any]] = []
+		for a, b in pairs:
+			lo, hi = sorted((a, b))
+			cells = [
+				{"column": self._col_person1_lookup, "value": lo},
+				{"column": self._col_person2_lookup, "value": hi},
+				{"column": self._col_send_email, "value": True},
+			]
+			rows.append({"cells": cells})
 
+		if not rows:
+			return 0
+
+		payload = {"rows": rows, "keyColumns": [self._col_person1_lookup, self._col_person2_lookup]}
+		url = f"https://coda.io/apis/v1/docs/{self._coda_doc_id}/tables/{self._coda_pairings_table_id}/rows"
+		resp = requests.post(url, headers=self._coda_headers(), json=payload, timeout=60)
+		if resp.status_code != 202:
+			raise RuntimeError(f"Coda upsert failed: {resp.status_code} {resp.text}")
+		return len(rows)
+
+	def _coda_headers(self) -> Dict[str, str]:
+		return {
+			"Authorization": f"Bearer {self._coda_token}",
+			"Content-Type": "application/json",
+		}
