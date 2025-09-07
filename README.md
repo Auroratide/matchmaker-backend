@@ -14,7 +14,6 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Install
-
 pip install -r requirements.txt
 ```
 
@@ -33,10 +32,10 @@ python -m src.init-local
 python -m src.matchmake
 ```
 
-## Documentation
-
-Please refer to the [Architecture Folder](./architecture/) to get oriented with how thing work! It also includes future considerations.
-
 ## Testing
 
-Sorry, I'm relatively new to python so I created a test folder but there's nothing in it right now. We really should test tho~
+Run unit tests with pytest:
+
+```
+python -m pytest -q
+```
