@@ -50,10 +50,17 @@ class PairStore:
 		with open(self.file_path, "w", encoding="utf-8") as f:
 			json.dump(serializable, f, indent=2, ensure_ascii=False)
 
-	def load_pairs(self) -> Set[Tuple[str, str]]:
+	def load_pairs_DEPRECATED(self) -> Set[Tuple[str, str]]:
 		"""Load all existing pairs as normalized tuples."""
 		with self._lock:
 			return self._read_pairs()
+
+	def load_pairs(self, vectors) -> Set[Tuple[str, str]]:
+		result = set[Tuple[str, str]]()
+		for vector in vectors:
+			for pastPair in vector["metadata"]["pastPairings"]:
+				result.add((vector["id"], pastPair))
+		return result
 
 	def has_pair(self, a: str, b: str) -> bool:
 		"""Check if a pair exists (order-insensitive)."""

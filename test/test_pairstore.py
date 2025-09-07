@@ -9,12 +9,12 @@ def test_pairstore_normalizes_and_persists():
 		store = PairStore(file_path=path)
 
 		# initially empty
-		assert store.load_pairs() == set()
+		assert store.load_pairs_DEPRECATED() == set()
 
 		added = store.add_pairs([("b", "a"), ("a", "b"), ("c", "d")])
 		assert added == 2  # only two unique pairs
 
-		pairs = store.load_pairs()
+		pairs = store.load_pairs_DEPRECATED()
 		assert ("a", "b") in pairs or ("b", "a") in pairs
 		assert ("c", "d") in pairs or ("d", "c") in pairs
 

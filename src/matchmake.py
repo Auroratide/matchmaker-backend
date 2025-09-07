@@ -4,13 +4,13 @@ from .visualization import visualize_graph
 from .coda_client import PairStore
 
 INDEX_NAME = "matchmaking-interests"
-ids_to_grab = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "eris"]
+# ids_to_grab = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "eris"]
 
 graph = PineconeGraph(INDEX_NAME)
-graph.build(ids_to_grab)
+graph.build()
 store = PairStore()
 
-existing = store.load_pairs()
+existing = store.load_pairs(graph.vectors)
 edges = graph.edges(forbidden_pairs=existing)
 final_pairs_idx = optimal_matching(edges)
 

@@ -13,12 +13,12 @@ class PineconeGraph:
 		self.id_to_index: dict[str, int] = {}
 		self.index_to_id: list[str] = []
 
-	def build(self, ids_to_grab):
+	def build(self):
 		index_host = self.client.describe_index(name=self.index_name).host
 		self.index = self.client.Index(host=index_host, grpc_config=GRPCClientConfig(secure=False))
 
-		response = self.index.fetch(ids_to_grab)
-		self.vectors = list(self.gimme(response).vectors.values())
+		self.vectors = self.get_all_entries()
+
 		# establish mappings between external ids and local indices
 		self.id_to_index = {vec.id: idx for idx, vec in enumerate(self.vectors)}
 		# preserve ordering using the mapping
@@ -74,7 +74,25 @@ class PineconeGraph:
 						edges.append((i, match_index, match.score))
 		
 		return edges
-				
+
+	def get_all_entries(self):
+		"""
+		You can't actually grab everything out of Pinecone. You can hack it with a big ol'
+		query tho. BIG NOTE THO, this only works for up to 10000 entries.
+		"""
+		stats = self.index.describe_index_stats()
+		dimension = stats["dimension"]
+		dummy_vector = [0.0] * dimension
+
+		response = self.gimme(self.index.query(
+			vector=dummy_vector,
+			top_k=10000,
+			include_values=True,
+			include_metadata=True
+		))
+
+		return response["matches"]
+
 	# I dunno why I need this, maybe temporary?
 	def gimme(self, thing: Union[T, PineconeGrpcFuture]) -> T:
 		if isinstance(thing, PineconeGrpcFuture):
