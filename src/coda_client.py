@@ -2,6 +2,9 @@ import os
 from typing import Iterable, Set, Tuple, Dict, Any
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _normalize_pair(a: str, b: str) -> Tuple[str, str]:
@@ -22,8 +25,6 @@ class PairStore:
 		self._coda_token = os.environ.get("CODA_API_TOKEN")
 		self._coda_doc_id = os.environ.get("CODA_DOC_ID")
 		self._coda_pairings_table_id = os.environ.get("CODA_PAIRINGS_TABLE_ID")
-		self._col_person1_lookup = os.environ.get("CODA_PERSON_1_COL_ID")
-		self._col_person2_lookup = os.environ.get("CODA_PERSON_2_COL_ID")
 		self._col_person1_id = os.environ.get("CODA_PERSON_1_ID_COL_ID")
 		self._col_person2_id = os.environ.get("CODA_PERSON_2_ID_COL_ID")
 		self._col_send_email = os.environ.get("CODA_SEND_EMAIL_COL_ID")
@@ -41,15 +42,14 @@ class PairStore:
 	def add_pairs(self, pairs: Iterable[Tuple[str, str]]) -> int:
 		"""Bulk upsert pairs to Coda; returns number of rows attempted.
 
-		Builds rows with lookup cells set via {"rowId": id} and uses
-		(Person 1 ID, Person 2 ID) as the upsert key.
+		Builds rows using (Person 1 ID, Person 2 ID) as the upsert key.
 		"""
 		rows: list[dict[str, Any]] = []
 		for a, b in pairs:
 			lo, hi = sorted((a, b))
 			cells = [
-				{"column": self._col_person1_lookup, "value": lo},
-				{"column": self._col_person2_lookup, "value": hi},
+				{"column": self._col_person1_id, "value": lo},
+				{"column": self._col_person2_id, "value": hi},
 				{"column": self._col_send_email, "value": True},
 			]
 			rows.append({"cells": cells})
@@ -57,7 +57,7 @@ class PairStore:
 		if not rows:
 			return 0
 
-		payload = {"rows": rows, "keyColumns": [self._col_person1_lookup, self._col_person2_lookup]}
+		payload = {"rows": rows, "keyColumns": [self._col_person1_id, self._col_person2_id]}
 		url = f"https://coda.io/apis/v1/docs/{self._coda_doc_id}/tables/{self._coda_pairings_table_id}/rows"
 		resp = requests.post(url, headers=self._coda_headers(), json=payload, timeout=60)
 		if resp.status_code != 202:

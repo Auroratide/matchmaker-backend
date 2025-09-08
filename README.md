@@ -39,3 +39,18 @@ Run unit tests with pytest:
 ```
 python -m pytest -q
 ```
+
+### Coda integration test (destructive and slow)
+
+There is a module `test/test_coda_integration.py` that performs real upserts and deletions against your configured Coda doc. It is destructive and can take multiple minutes due to API polling. It is skipped by default unless all required env vars are present and you confirm interactively.
+
+Required test env vars (recommended to set in the shell only):
+
+- `CODA_TEST_ADD_P1`, `CODA_TEST_ADD_P2`
+- `CODA_TEST_DUP_P1`, `CODA_TEST_DUP_P2`
+- `CODA_TEST_SORT_P1`, `CODA_TEST_SORT_P2`
+- `CODA_TEST_MULTI_P1`, `CODA_TEST_MULTI_P2`, `CODA_TEST_MULTI_P3`, `CODA_TEST_MULTI_P4`
+
+Before running, double-check that the doc/table/column IDs and test person IDs point to safe, disposable test data. Then run:
+
+When prompted, type `PROCEED` to confirm. In non-interactive sessions (e.g. CI), the test will be skipped.

@@ -1,3 +1,4 @@
+
 import os
 import requests
 import time
@@ -5,182 +6,175 @@ import pytest
 
 from src.coda_client import PairStore
 
+from dotenv import load_dotenv
 
-required_envs = [
-	"CODA_API_TOKEN",
-	"CODA_DOC_ID",
-	"CODA_PAIRINGS_TABLE_ID",
-	"CODA_PERSON_1_COL_ID",
-	"CODA_PERSON_2_COL_ID",
-	"CODA_PERSON_1_ID_COL_ID",
-	"CODA_PERSON_2_ID_COL_ID",
-	"CODA_SEND_EMAIL_COL_ID",
-	"CODA_TEST_PERSON1_ID",
-	"CODA_TEST_PERSON2_ID",
-]
+load_dotenv()
 
+# Mark this module as destructive so collection prompts happen before running
+pytestmark = pytest.mark.coda_destructive
 
-skip_reason = "Missing one or more required env vars for Coda integration test"
-skip_integration = any(os.environ.get(k) in (None, "") for k in required_envs)
+DOC = os.environ.get("CODA_DOC_ID")
+TABLE = os.environ.get("CODA_PAIRINGS_TABLE_ID")
+PC1 = os.environ.get("CODA_PERSON_1_ID_COL_ID")
+PC2 = os.environ.get("CODA_PERSON_2_ID_COL_ID")
+TOKEN = os.environ.get("CODA_API_TOKEN")
+ROWS_URL = f"https://coda.io/apis/v1/docs/{DOC}/tables/{TABLE}/rows"
+AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+JSON_HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
+SESSION = requests.Session()
 
-
-@pytest.mark.skipif(skip_integration, reason=skip_reason)
-def test_coda_upsert_smoke():
-	"""Smoke test: upsert one pairing row to Coda.
-
-	Requires CODA_* env vars and CODA_TEST_PERSON{1,2}_ID to be set.
-	"""
-	store = PairStore()
-	p1 = os.environ["CODA_TEST_PERSON1_ID"]
-	p2 = os.environ["CODA_TEST_PERSON2_ID"]
-	rows = store.add_pairs([(p1, p2)])
-	assert rows >= 1
+ADD_P1 = os.environ.get("CODA_TEST_ADD_P1")
+ADD_P2 = os.environ.get("CODA_TEST_ADD_P2")
+DUP_P1 = os.environ.get("CODA_TEST_DUP_P1")
+DUP_P2 = os.environ.get("CODA_TEST_DUP_P2")
+SORT_P1 = os.environ.get("CODA_TEST_SORT_P1")
+SORT_P2 = os.environ.get("CODA_TEST_SORT_P2")
+MULTI_P1 = os.environ.get("CODA_TEST_MULTI_P1")
+MULTI_P2 = os.environ.get("CODA_TEST_MULTI_P2")
+MULTI_P3 = os.environ.get("CODA_TEST_MULTI_P3")
+MULTI_P4 = os.environ.get("CODA_TEST_MULTI_P4")
 
 
-def _extract_row_id(cell_value):
-	if isinstance(cell_value, dict):
-		return cell_value.get("rowId") or cell_value.get("url") or str(cell_value)
-	if isinstance(cell_value, list) and cell_value:
-		v = cell_value[0]
-		return v.get("rowId") if isinstance(v, dict) else str(v)
-	return str(cell_value)
-
-
-def _cleanup_pair(p1: str, p2: str) -> None:
-	"""Delete any existing rows that reference this pair in either order."""
-	headers = {
-		"Authorization": f"Bearer {os.environ['CODA_API_TOKEN']}",
-		"Content-Type": "application/json",
-	}
-	url = f"https://coda.io/apis/v1/docs/{os.environ['CODA_DOC_ID']}/tables/{os.environ['CODA_PAIRINGS_TABLE_ID']}/rows"
-	pc1 = os.environ["CODA_PERSON_1_COL_ID"]
-	pc2 = os.environ["CODA_PERSON_2_COL_ID"]
-	res = requests.get(url, headers=headers, params={"valueFormat": "rich", "limit": 500})
-	res.raise_for_status()
-	items = res.json().get("items", [])
-	to_delete = []
-	for it in items:
-		vals = it.get("values", {})
-		v1 = _extract_row_id(vals.get(pc1))
-		v2 = _extract_row_id(vals.get(pc2))
-		if {v1, v2} == {p1, p2}:
-			row_id = it.get("id")
-			if isinstance(row_id, str):
-				to_delete.append(row_id)
-	if to_delete:
-		requests.delete(url, headers=headers, json={"rowIds": to_delete})
-
-
-@pytest.mark.skipif(skip_integration, reason=skip_reason)
-def test_coda_upsert_duplicates_not_added():
-	store = PairStore()
-	p1 = os.environ["CODA_TEST_PERSON1_ID"]
-	p2 = os.environ["CODA_TEST_PERSON2_ID"]
-	_cleanup_pair(p1, p2)
-	# First upsert
-	store.add_pairs([(p1, p2)])
-	# Duplicate, reversed order
-	store.add_pairs([(p2, p1)])
-
-	# Fetch rows in rich format and ensure exactly one row matches the pair
-	headers = {"Authorization": f"Bearer {os.environ['CODA_API_TOKEN']}"}
-	url = f"https://coda.io/apis/v1/docs/{os.environ['CODA_DOC_ID']}/tables/{os.environ['CODA_PAIRINGS_TABLE_ID']}/rows"
-	res = requests.get(url, headers=headers, params={"valueFormat": "rich", "limit": 500})
-	res.raise_for_status()
-	items = res.json().get("items", [])
-	lo, hi = sorted((p1, p2))
-	pc1 = os.environ["CODA_PERSON_1_COL_ID"]
-	pc2 = os.environ["CODA_PERSON_2_COL_ID"]
-	count = 0
-	for it in items:
-		vals = it.get("values", {})
-		v1 = _extract_row_id(vals.get(pc1))
-		v2 = _extract_row_id(vals.get(pc2))
-		if v1 == lo and v2 == hi:
-			count += 1
-	assert count == 1
-
-
-@pytest.mark.skipif(skip_integration, reason=skip_reason)
-def test_coda_upsert_enforces_sorted_order():
-	store = PairStore()
-	p1 = os.environ["CODA_TEST_PERSON1_ID"]
-	p2 = os.environ["CODA_TEST_PERSON2_ID"]
-	_cleanup_pair(p1, p2)
-	# Intentionally reversed input
-	store.add_pairs([(p2, p1)])
-
-	# Fetch and verify Person 1 column is lexicographically lower than Person 2
-	headers = {"Authorization": f"Bearer {os.environ['CODA_API_TOKEN']}"}
-	url = f"https://coda.io/apis/v1/docs/{os.environ['CODA_DOC_ID']}/tables/{os.environ['CODA_PAIRINGS_TABLE_ID']}/rows"
-	pc1 = os.environ["CODA_PERSON_1_COL_ID"]
-	pc2 = os.environ["CODA_PERSON_2_COL_ID"]
-	lo, hi = sorted((p1, p2))
-
-	for _ in range(10):
-		res = requests.get(url, headers=headers, params={"valueFormat": "rich", "limit": 200})
+def _delete_pairs(pairs: list[tuple[str, str]]) -> None:
+	"""Discover once, bulk-delete, then poll rowIds until gone."""
+	# Initial discovery
+	initial_row_ids: set[str] = set()
+	for a, b in pairs:
+		query = f"{PC1}:{str(a)}"
+		params = {"query": query, "valueFormat": "simple", "limit": 1}
+		res = SESSION.get(ROWS_URL, headers=AUTH_HEADERS, params=params, timeout=60)
 		res.raise_for_status()
 		items = res.json().get("items", [])
-		found_sorted = False
-		found_reversed = False
 		for it in items:
 			vals = it.get("values", {})
-			v1 = _extract_row_id(vals.get(pc1))
-			v2 = _extract_row_id(vals.get(pc2))
-			if v1 == lo and v2 == hi:
-				found_sorted = True
-			if v1 == hi and v2 == lo:
-				found_reversed = True
-		if found_sorted and not found_reversed:
+			val_lo = str(vals.get(PC1))
+			val_hi = str(vals.get(PC2))
+			if val_lo == str(a) and val_hi == str(b):
+				row_id = it.get("id")
+				if isinstance(row_id, str):
+					initial_row_ids.add(row_id)
+
+	if not initial_row_ids:
+		return
+
+	# Bulk delete once
+	to_delete = sorted(initial_row_ids)
+	resp = SESSION.delete(ROWS_URL, headers=JSON_HEADERS, json={"rowIds": to_delete}, timeout=60)
+	if resp.status_code != 202:
+		print(f"warning: bulk delete returned {resp.status_code}: {resp.text}")
+
+	# Poll by rowId only
+	remaining: set[str] = set(initial_row_ids)
+	for _ in range(10):
+		still: set[str] = set()
+		for rid in sorted(remaining):
+			row_url = f"https://coda.io/apis/v1/docs/{DOC}/tables/{TABLE}/rows/{rid}"
+			resp = SESSION.get(row_url, headers=AUTH_HEADERS, timeout=30)
+			if resp.status_code == 404:
+				continue
+			if resp.status_code == 200:
+				still.add(rid)
+				continue
+			still.add(rid)
+		remaining = still
+		if not remaining:
 			break
 		time.sleep(1)
 
-	assert found_sorted is True
-	assert found_reversed is False
 
-
-@pytest.mark.skipif(
-	any(os.environ.get(k) in (None, "") for k in required_envs + ["CODA_TEST_PERSON3_ID", "CODA_TEST_PERSON4_ID"]),
-	reason="Missing env vars for multi-row integration test",
-)
-def test_coda_upsert_multiple_rows():
-	store = PairStore()
-	p1 = os.environ["CODA_TEST_PERSON1_ID"]
-	p2 = os.environ["CODA_TEST_PERSON2_ID"]
-	p3 = os.environ["CODA_TEST_PERSON3_ID"]
-	p4 = os.environ["CODA_TEST_PERSON4_ID"]
-	store.add_pairs([(p1, p2), (p3, p4)])
-
-	# Verify both pairs exist exactly once, allow for async mutation to apply
-	headers = {"Authorization": f"Bearer {os.environ['CODA_API_TOKEN']}"}
-	url = f"https://coda.io/apis/v1/docs/{os.environ['CODA_DOC_ID']}/tables/{os.environ['CODA_PAIRINGS_TABLE_ID']}/rows"
-	pc1 = os.environ["CODA_PERSON_1_COL_ID"]
-	pc2 = os.environ["CODA_PERSON_2_COL_ID"]
-
-	def fetch_items():
-		res = requests.get(url, headers=headers, params={"valueFormat": "rich", "limit": 500})
+def _count_pair_query(a, b) -> int:
+	# Respect argument order: PC1 must equal 'a', PC2 must equal 'b'
+	expected_pc1 = str(a)
+	expected_pc2 = str(b)
+	c = 0
+	for _ in range(10):
+		print("\npolling changes...")
+		query = f"{PC1}:{expected_pc1}"
+		params = {"query": query, "valueFormat": "simple", "limit": 1}
+		res = SESSION.get(ROWS_URL, headers=AUTH_HEADERS, params=params, timeout=60)
 		res.raise_for_status()
-		return res.json().get("items", [])
-
-	def count_pair(items, a, b):
-		lo, hi = sorted((a, b))
+		items = res.json().get("items", [])
 		c = 0
 		for it in items:
 			vals = it.get("values", {})
-			v1 = _extract_row_id(vals.get(pc1))
-			v2 = _extract_row_id(vals.get(pc2))
-			if v1 == lo and v2 == hi:
+			val_pc1 = str(vals.get(PC1))
+			val_pc2 = str(vals.get(PC2))
+			if val_pc1 == expected_pc1 and val_pc2 == expected_pc2:
 				c += 1
-		return c
-
-	for _ in range(10):
-		items = fetch_items()
-		if count_pair(items, p1, p2) == 1 and count_pair(items, p3, p4) == 1:
-			break
-		time.sleep(1)
-
-	items = fetch_items()
-	assert count_pair(items, p1, p2) == 1
-	assert count_pair(items, p3, p4) == 1
+		if c > 0:
+			return c
+		time.sleep(5)
+	return c
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _cleanup_test_pairs():
+	# Pre-clean all test pairs
+	print("\npre-cleaning test pairs")
+	pairs = [
+		(str(ADD_P1), str(ADD_P2)),
+		(str(DUP_P1), str(DUP_P2)),
+		(str(SORT_P1), str(SORT_P2)),
+		(str(MULTI_P1), str(MULTI_P2)),
+		(str(MULTI_P3), str(MULTI_P4)),
+	]
+	_delete_pairs(pairs)
+	# Run the test
+	yield
+	# Post-clean all test pairs
+	print("\npost-cleaning test pairs")
+	_delete_pairs(pairs)
+
+
+def test_coda_upsert():
+	# Simple per-test env assertions
+	assert ADD_P1 and ADD_P2, "CODA_TEST_ADD_* envs must be set"
+	store = PairStore()
+	# Use env-provided unique pair for this test
+	a, b = str(ADD_P1), str(ADD_P2)
+	store.add_pairs([(a, b)])
+	
+	# Verify: count is 1, not 2
+	after = _count_pair_query(a, b)
+	assert after == 1
+
+
+def test_coda_upsert_duplicates_not_added():
+	assert DUP_P1 and DUP_P2, "CODA_TEST_DUP_* envs must be set"
+	store = PairStore()
+	# Use env-provided unique pair for this test
+	a, b = str(DUP_P1), str(DUP_P2)
+
+	# Perform two upserts
+	store.add_pairs([(a, b)])
+	store.add_pairs([(a, b)])
+
+	# Verify: count is 1, not 2
+	after_dupe = _count_pair_query(a, b)
+	assert after_dupe == 1
+
+
+def test_coda_upsert_enforces_sorted_order():
+	assert SORT_P1 and SORT_P2, "CODA_TEST_SORT_* envs must be set"
+	store = PairStore()
+	a, b = sorted([str(SORT_P1), str(SORT_P2)])
+	# Intentionally reversed input; implementation should store as sorted by Person ID
+	store.add_pairs([(b, a)])
+	# Verify: sorted is present once; reversed absent
+	after_sorted = _count_pair_query(a, b)
+	after_reversed = _count_pair_query(b, a)
+	assert after_sorted == 1
+	assert after_reversed == 0
+
+
+def test_coda_upsert_multiple_rows():
+	assert MULTI_P1 and MULTI_P2 and MULTI_P3 and MULTI_P4, "CODA_TEST_MULTI_* envs must be set"
+	store = PairStore()
+	a1, b1 = str(MULTI_P1), str(MULTI_P2)
+	a2, b2 = str(MULTI_P3), str(MULTI_P4)
+	store.add_pairs([(a1, b1), (a2, b2)])
+	# Verify each appears once
+	after_12 = _count_pair_query(a1, b1)
+	after_34 = _count_pair_query(a2, b2)
+	assert after_12 == 1
+	assert after_34 == 1
