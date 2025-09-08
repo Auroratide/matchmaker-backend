@@ -4,7 +4,7 @@ import requests
 import time
 import pytest
 
-from src.coda_client import PairStore
+from src.coda_client import CodaClient
 
 from dotenv import load_dotenv
 
@@ -129,10 +129,10 @@ def _cleanup_test_pairs():
 def test_coda_upsert():
 	# Simple per-test env assertions
 	assert ADD_P1 and ADD_P2, "CODA_TEST_ADD_* envs must be set"
-	store = PairStore()
+	coda = CodaClient()
 	# Use env-provided unique pair for this test
 	a, b = str(ADD_P1), str(ADD_P2)
-	store.add_pairs([(a, b)])
+	coda.add_pairs([(a, b)])
 	
 	# Verify: count is 1, not 2
 	after = _count_pair_query(a, b)
@@ -141,13 +141,13 @@ def test_coda_upsert():
 
 def test_coda_upsert_duplicates_not_added():
 	assert DUP_P1 and DUP_P2, "CODA_TEST_DUP_* envs must be set"
-	store = PairStore()
+	coda = CodaClient()
 	# Use env-provided unique pair for this test
 	a, b = str(DUP_P1), str(DUP_P2)
 
 	# Perform two upserts
-	store.add_pairs([(a, b)])
-	store.add_pairs([(a, b)])
+	coda.add_pairs([(a, b)])
+	coda.add_pairs([(a, b)])
 
 	# Verify: count is 1, not 2
 	after_dupe = _count_pair_query(a, b)
@@ -156,10 +156,10 @@ def test_coda_upsert_duplicates_not_added():
 
 def test_coda_upsert_enforces_sorted_order():
 	assert SORT_P1 and SORT_P2, "CODA_TEST_SORT_* envs must be set"
-	store = PairStore()
+	coda = CodaClient()
 	a, b = sorted([str(SORT_P1), str(SORT_P2)])
 	# Intentionally reversed input; implementation should store as sorted by Person ID
-	store.add_pairs([(b, a)])
+	coda.add_pairs([(b, a)])
 	# Verify: sorted is present once; reversed absent
 	after_sorted = _count_pair_query(a, b)
 	after_reversed = _count_pair_query(b, a)
@@ -169,10 +169,10 @@ def test_coda_upsert_enforces_sorted_order():
 
 def test_coda_upsert_multiple_rows():
 	assert MULTI_P1 and MULTI_P2 and MULTI_P3 and MULTI_P4, "CODA_TEST_MULTI_* envs must be set"
-	store = PairStore()
+	coda = CodaClient()
 	a1, b1 = str(MULTI_P1), str(MULTI_P2)
 	a2, b2 = str(MULTI_P3), str(MULTI_P4)
-	store.add_pairs([(a1, b1), (a2, b2)])
+	coda.add_pairs([(a1, b1), (a2, b2)])
 	# Verify each appears once
 	after_12 = _count_pair_query(a1, b1)
 	after_34 = _count_pair_query(a2, b2)

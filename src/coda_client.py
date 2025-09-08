@@ -6,13 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
-def _normalize_pair(a: str, b: str) -> Tuple[str, str]:
-	"""Return a stable, order-independent pair key."""
-	return tuple(sorted((a, b)))  # type: ignore[return-value]
-
-
-class PairStore:
+class CodaClient:
 	"""Load existing pairs from Pinecone and upsert new pairs to Coda.
 
 	- Expects Pinecone match objects with attributes: id: str and metadata: dict
@@ -28,16 +22,6 @@ class PairStore:
 		self._col_person1_id = os.environ.get("CODA_PERSON_1_ID_COL_ID")
 		self._col_person2_id = os.environ.get("CODA_PERSON_2_ID_COL_ID")
 		self._col_send_email = os.environ.get("CODA_SEND_EMAIL_COL_ID")
-
-
-	def load_pairs(self, vectors) -> Set[Tuple[str, str]]:
-		"""Return normalized pairs drawn from vectors' metadata['pastPairings']."""
-		existing_pairs: Set[Tuple[str, str]] = set()
-		for vec in vectors:
-			past = vec.metadata["pastPairings"] or []
-			for partner_id in past:
-				existing_pairs.add(_normalize_pair(vec.id, partner_id))
-		return existing_pairs
 
 	def add_pairs(self, pairs: Iterable[Tuple[str, str]]) -> int:
 		"""Bulk upsert pairs to Coda; returns number of rows attempted.

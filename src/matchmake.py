@@ -1,16 +1,16 @@
 from .pinecone_graph import PineconeGraph
 from .matching import optimal_matching
 from .visualization import visualize_graph
-from .coda_client import PairStore
+from .coda_client import CodaClient
 
 INDEX_NAME = "matchmaking-interests"
 # ids_to_grab = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto", "eris"]
 
 graph = PineconeGraph(INDEX_NAME)
 graph.build()
-store = PairStore()
+coda = CodaClient()
 
-existing = store.load_pairs(graph.vectors)
+existing = graph.load_pairs()
 edges = graph.edges(forbidden_pairs=existing)
 final_pairs_idx = optimal_matching(edges)
 
@@ -28,8 +28,9 @@ visualize_graph(edges)
 
 # optionally persist the new pairs
 if new_pairs_ids:
-	added = store.add_pairs(new_pairs_ids)
-	print(f"persisted {added} new pairs")
+	coda_rows = coda.add_pairs(new_pairs_ids)
+	pinecone_vectors = graph.add_pairs(new_pairs_ids)
+	print(f"persisted {coda_rows} pairs to Coda; updated {pinecone_vectors} vectors in Pinecone")
 
 
 ### IGNORE EVERYTHING BELOW

@@ -93,6 +93,39 @@ class PineconeGraph:
 
 		return response["matches"]
 
+	def load_pairs(self) -> Set[Tuple[str, str]]:
+		existing_pairs: Set[Tuple[str, str]] = set()
+		for vec in self.vectors:
+			past = vec.metadata.get("pastPairings") or []
+			for partner_id in past:
+				existing_pairs.add((vec.id, partner_id))
+		return existing_pairs
+
+	def add_pairs(self, pairs: Iterable[Tuple[str, str]]) -> int:
+		partners_to_add: dict[str, set[str]] = {}
+		for a, b in pairs:
+			partners_to_add.setdefault(a, set()).add(b)
+			partners_to_add.setdefault(b, set()).add(a)
+
+		payload = []
+		for vid, additions in partners_to_add.items():
+			idx = self.id_to_index.get(vid)
+			vec = self.vectors[idx]
+			metadata = dict(getattr(vec, "metadata", {}) or {})
+			past = list(metadata.get("pastPairings") or [])
+			metadata["pastPairings"] = list({*past, *additions})
+			payload.append({
+				"id": vid,
+				"values": getattr(vec, "values", []),
+				"metadata": metadata,
+			})
+
+		if not payload:
+			return 0
+
+		self.index.upsert(vectors=payload)
+		return len(payload)
+
 	# I dunno why I need this, maybe temporary?
 	def gimme(self, thing: Union[T, PineconeGrpcFuture]) -> T:
 		if isinstance(thing, PineconeGrpcFuture):
