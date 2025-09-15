@@ -1,21 +1,27 @@
+import os
 from typing import TypeVar, Union, Iterable, Optional, Set, Tuple
 from pinecone.grpc import PineconeGRPC, GRPCClientConfig, PineconeGrpcFuture
+from dotenv import load_dotenv
+
+load_dotenv()
 
 T = TypeVar("T")
 
 class PineconeGraph:
 	def __init__(self, index_name):
+		self._pinecone_token = os.environ.get("PINECONE_API_KEY")
 		self.index_name = index_name
 		self.client = PineconeGRPC(
-			api_key="pclocal",
-			host="http://localhost:5080"
+			api_key=self._pinecone_token,
+			# host="http://localhost:5080"
 		)
 		self.id_to_index: dict[str, int] = {}
 		self.index_to_id: list[str] = []
 
 	def build(self):
-		index_host = self.client.describe_index(name=self.index_name).host
-		self.index = self.client.Index(host=index_host, grpc_config=GRPCClientConfig(secure=False))
+		# index_host = self.client.describe_index(name=self.index_name).host
+		# self.index = self.client.Index(host=index_host, grpc_config=GRPCClientConfig(secure=False))
+		self.index = self.client.Index(name=self.index_name)
 
 		self.vectors = self.get_all_entries()
 
@@ -98,6 +104,9 @@ class PineconeGraph:
 		for vec in self.vectors:
 			past = vec.metadata.get("pastPairings") or []
 			for partner_id in past:
+				# Coda doesn't wanna insert empty list, so we ignore id 0
+				if partner_id == "0" or partner_id == 0:
+					continue
 				existing_pairs.add((vec.id, partner_id))
 		return existing_pairs
 

@@ -13,7 +13,7 @@ pinecone = PineconeGRPC(
 
 MODEL = "nomic-embed-text"
 MODEL_DIM = 768
-INDEX_NAME = "matchmaking-interests"
+INDEX_NAME = "matchmaker-interests-3072"
 
 if not pinecone.has_index(INDEX_NAME):
 	print("Index does not exist. Creating...")
