@@ -6,8 +6,8 @@ load_dotenv()
 
 pinecone = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
-INDEX_NAME = "matchmaker-interests"
-MODEL_DIMENSION = 768 # gemini-embedding-001
+INDEX_NAME = "matchmaker-interests-3072"
+MODEL_DIMENSION = 3072 # gemini-embedding-001
 
 if not pinecone.has_index(INDEX_NAME):
 	print("Index does not exist. Creating...")
