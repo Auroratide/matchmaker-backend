@@ -39,7 +39,6 @@ class PineconeGraph:
 		edges = []
 
 		id_to_index = self.id_to_index
-		print(id_to_index)
 
 		# normalize forbidden pairs to index pairs for quick filtering
 		forbidden_idx: Set[Tuple[int, int]] = set()

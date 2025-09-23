@@ -54,3 +54,13 @@ Required test env vars (recommended to set in the shell only):
 Before running, double-check that the doc/table/column IDs and test person IDs point to safe, disposable test data. Then run:
 
 When prompted, type `PROCEED` to confirm. In non-interactive sessions (e.g. CI), the test will be skipped.
+
+## Deployment
+
+TODO: Trigger on release cut in github
+
+1. Install gcloud cli: https://cloud.google.com/sdk/docs/install
+2. `gcloud auth login`
+3. `env $(cat .env | xargs) ./deploy.sh`
+
+Can test manually with: `gcloud pubsub topics publish matchmake-trigger --message="trigger"`
