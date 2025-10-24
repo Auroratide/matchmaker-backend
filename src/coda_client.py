@@ -23,6 +23,10 @@ class CodaClient:
 		self._col_person2_id = os.environ.get("CODA_PERSON_2_ID_COL_ID")
 		self._col_send_email = os.environ.get("CODA_SEND_EMAIL_COL_ID")
 
+		self._coda_people_table_id = os.environ.get("CODA_PEOPLE_TABLE_ID")
+		self._col_email_verified_id = os.environ.get("CODA_EMAIL_VERIFIED_COL_ID")
+		self._col_verification_id_id = os.environ.get("CODA_VERIFICATION_ID_COL_ID")
+
 	def add_pairs(self, pairs: Iterable[Tuple[str, str]]) -> int:
 		"""Bulk upsert pairs to Coda; returns number of rows attempted.
 
@@ -47,6 +51,26 @@ class CodaClient:
 		if resp.status_code != 202:
 			raise RuntimeError(f"Coda upsert failed: {resp.status_code} {resp.text}")
 		return len(rows)
+
+	def verify_email(self, person_id: str, verification_id: str):
+		"""
+		Finds a person by their verification id, then sets their
+		Email Verified column to true.
+		"""
+		get_url = f"https://coda.io/apis/v1/docs/{self._coda_doc_id}/tables/{self._coda_people_table_id}/rows/{person_id}"
+		get_res = requests.get(get_url, headers=self._coda_headers(), timeout=60).json()
+
+		if verification_id == get_res["values"][self._col_verification_id_id]:
+			put_url = f"https://coda.io/apis/v1/docs/{self._coda_doc_id}/tables/{self._coda_people_table_id}/rows/{person_id}"
+			payload = {"row": {"cells": [{"column": self._col_email_verified_id, "value": True}]}}
+			put_res = requests.put(put_url, headers=self._coda_headers(), json=payload, timeout=60)
+
+			if put_res.status_code != 202:
+				raise RuntimeError(f"Coda put failed: {put_res.status_code} {put_res.text}")
+
+			return True
+		else:
+			raise RuntimeError(f"Verification ID does not match for row {person_id} (provided: {verification_id})")
 
 	def _coda_headers(self) -> Dict[str, str]:
 		return {

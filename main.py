@@ -2,6 +2,7 @@ import logging
 import json
 import functions_framework
 from src.main import perform_matchmaking
+from src.verify_email import verify_email
 
 # Configure logging for Cloud Functions
 logging.basicConfig(level=logging.INFO)
@@ -58,6 +59,34 @@ def matchmake_scheduled(cloud_event):
 		logger.error(f"Error in scheduled matchmaking process: {str(e)}", exc_info=True)
 		raise  # Re-raise to mark the function as failed
 
+@functions_framework.http
+def verify(request):
+	success_redirect = "https://www.aisafety.com/doomr-verified"
+	failure_redirect = "https://www.aisafety.com/doomr-failure"
+	try:
+		if request.method != "GET":
+			return "Method not allowed", 405
+
+		person_id = request.args.get('person_id')
+		verification_id = request.args.get('verification_id')
+
+		if not person_id:
+			logger.error("Error in verifying email: person_id was missing")
+			return "", 302, {"Location": failure_redirect}
+
+		if not verification_id:
+			logger.error("Error in verifying email: verification_id was missing")
+			return "", 302, {"Location": failure_redirect}
+
+		logger.info(f"Start verifying email for {verification_id}")
+		verify_email(person_id, verification_id)
+		logger.info(f"Done verifying email for {verification_id}")
+
+		return "", 302, {"Location": success_redirect}
+
+	except Exception as e:
+		logger.error(f"Error in verifying email: {str(e)}", exc_info=True)
+		return "", 302, {"Location": failure_redirect}
 
 # For local testing
 if __name__ == "__main__":
