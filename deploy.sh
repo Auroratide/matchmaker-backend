@@ -7,8 +7,10 @@ set -e  # Exit on any error
 
 PROJECT_ID="${GCLOUD_PROJECT_ID}"
 REGION="${GCLOUD_REGION}"
-FUNCTION_NAME="matchmake_scheduled"
-ENTRY_POINT="matchmake_scheduled"
+MATCHMAKE_FUNCTION_NAME="matchmake_scheduled"
+MATCHMAKE_ENTRY_POINT="matchmake_scheduled"
+VERIFY_FUNCTION_NAME="verify_email"
+VERIFY_ENTRY_POINT="verify"
 TOPIC="matchmake-trigger"
 RUNTIME="${RUNTIME:-python311}"
 MEMORY="${MEMORY:-512MB}"
@@ -82,14 +84,14 @@ gcloud services enable eventarc.googleapis.com
 echo -e "${YELLOW}Creating Pub/Sub topic if it doesn't exist...${NC}"
 gcloud pubsub topics create $TOPIC --quiet || echo "Topic already exists"
 
-# Deploy the function
-echo -e "${YELLOW}Deploying Cloud Function...${NC}"
-gcloud functions deploy $FUNCTION_NAME \
+# Deploy the functions
+echo -e "${YELLOW}Deploying Matchmake Cloud Function...${NC}"
+gcloud functions deploy $MATCHMAKE_FUNCTION_NAME \
 	--gen2 \
 	--runtime=$RUNTIME \
 	--region=$REGION \
 	--source=. \
-	--entry-point=$ENTRY_POINT \
+	--entry-point=$MATCHMAKE_ENTRY_POINT \
 	--memory=$MEMORY \
 	--timeout=$TIMEOUT \
 	--trigger-topic=$TOPIC \
@@ -97,12 +99,30 @@ gcloud functions deploy $FUNCTION_NAME \
 	--max-instances=1 \
 	--no-allow-unauthenticated
 
-# Check deployment status
 if [ $? -eq 0 ]; then
 	echo -e "${GREEN}✅ Function deployed successfully!${NC}"
-	echo -e "${GREEN}Function name: ${FUNCTION_NAME}${NC}"
-	echo -e "${GREEN}Region: ${REGION}${NC}"
-	echo -e "${GREEN}Trigger: Pub/Sub topic '$TOPIC'${NC}"
+	echo -e "${GREEN}Function name: ${MATCHMAKE_FUNCTION_NAME}${NC}"
+else
+	echo -e "${RED}❌ Deployment failed!${NC}"
+	exit 1
+fi
+
+echo -e "${YELLOW}Deploying Verify Cloud Function...${NC}"
+gcloud functions deploy $VERIFY_FUNCTION_NAME \
+	--gen2 \
+	--runtime=$RUNTIME \
+	--region=$REGION \
+	--source=. \
+	--entry-point=$VERIFY_ENTRY_POINT \
+	--memory=$MEMORY \
+	--timeout=$TIMEOUT \
+	--trigger-http \
+	--set-env-vars="$ENV_VARS" \
+	--allow-unauthenticated
+
+if [ $? -eq 0 ]; then
+	echo -e "${GREEN}✅ Function deployed successfully!${NC}"
+	echo -e "${GREEN}Function name: ${VERIFY_FUNCTION_NAME}${NC}"
 else
 	echo -e "${RED}❌ Deployment failed!${NC}"
 	exit 1
